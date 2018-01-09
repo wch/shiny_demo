@@ -8,7 +8,6 @@ library(ggplot2)
 library(ggrepel)
 
 source("../utils.R")
-source("../pkg_info.R")
 
 all_data <- readRDS("packages.rds")
 all_data <- all_data %>%
@@ -62,9 +61,8 @@ count_by_date <- compute_count_by_date()
 
 
 ui <- navbarPage(theme = shinytheme("paper"),
-  "Packages on CRAN",
+  "CRAN explorer",
   tabPanel("Timeline",
-    includeCSS("../pkg_info.css"),
     sliderInput("date", "Date",
       date_min, date_max, date_max,
       width = "100%"),
@@ -84,8 +82,7 @@ ui <- navbarPage(theme = shinytheme("paper"),
     ),
     uiOutput("package_version_selector", style = "display:inline-block"),
     uiOutput("package_info"),
-    plotOutput("package_timeline", height = "120px"),
-    plotOutput("package_deps_timeline", height = "120px"),
+    plotOutput("package_timeline", height = "240px"),
     tableOutput("package_versions_table")
   )
 
@@ -133,35 +130,70 @@ server <- function(input, output) {
   output$package_info <- renderUI({
     dat <- selected_package_data() %>% filter(Version == input$package_version)
     if (nrow(dat) != 1)
-      return(invisible())
-    # str(transpose(dat)[[1]])
-    pkg_info_table(dat)
+      return()
+
+    deps <- dat %>% left_join(all_deps, by = c("Package", "Version"))
+
+
+    wellPanel(
+      p(tags$b("Title: "), dat$Title),
+      p(tags$b("Description: "), dat$Description),
+      p(tags$b("Maintainer: "), dat$Maintainer),
+      p(tags$b("License: "), dat$License),
+      p(tags$b("Bug Reports: "), a(href = dat$BugReports, dat$BugReports, target = "_blank")),
+      p(tags$b("URL: "), a(href = dat$URL, dat$URL, target = "_blank")),
+      p(tags$b("Date: "), dat$date),
+      p(tags$b("Depends: "),
+        filter(deps, type == "Depends") %>% pull(name) %>% paste(collapse = ", ")),
+      p(tags$b("Imports: "),
+        filter(deps, type == "Imports") %>% pull(name) %>% paste(collapse = ", ")),
+      p(tags$b("Suggests: "),
+        filter(deps, type == "Suggests") %>% pull(name) %>% paste(collapse = ", ")),
+      p(tags$b("MD5sum: "), dat$MD5sum)
+    )
   })
 
   output$package_timeline <- renderPlot({
     dat <- selected_package_data()
+    if (nrow(dat) == 0)
+      return()
 
-    ggplot(dat, aes(date)) + geom_point(y=1, color = "red") +
-      scale_y_continuous(name = NULL, limits = c(0, 2), breaks = NULL) +
-      scale_x_date(name = NULL, date_minor_breaks = "1 month") +
-      geom_text_repel(y = 1, color = "grey60", aes(label = Version),
-        point.padding = 1, min.segment.length = 0) +
-      ggtitle("Releases") +
-      theme_bw()
-  })
-
-  output$package_deps_timeline <- renderPlot({
-    dat <- gather(deps_summary, type, n, Depends:Suggests) %>%
+    deps <- gather(deps_summary, type, n, Depends:Suggests) %>%
       filter(Package == input$package) %>%
       left_join(all_data, by = c("Package", "Version")) %>%
       mutate(type = factor(type, levels = c("Suggests", "Imports", "Depends")))
 
-    ggplot(dat, aes(x = date, y = n, fill = type)) + geom_area()
+    y_max <- deps %>%
+      group_by(Package, Version) %>%
+      summarise(n = sum(n)) %>%
+      pull(n) %>%
+      max()
+    y_lims <- c(-0.5*y_max, y_max)
+    y_breaks <- pretty(c(0, y_max), n = 3)
 
+    ggplot(deps, aes(x = date)) +
+      geom_hline(yintercept = 0, size = 0.4) +
+      geom_area(aes(y = n, fill = type), position = "stack", alpha = 0.4) +
+      geom_line(aes(y = n, group = type), position = "stack", size = .2) +
+      geom_point(data = dat, y = 0, size = 1, color = "red") +
+      geom_text_repel(data = dat, y = 0, angle = 90, color = "grey60",
+        ylim = c(NA, 0), aes(label = Version),
+        point.padding = 1, min.segment.length = 0) +
+      scale_fill_brewer(palette = "Blues") +
+      scale_y_continuous(name = NULL, limits = y_lims, breaks = y_breaks, expand = c(0.05, 0)) +
+      scale_x_date(name = NULL, date_minor_breaks = "1 month", expand = c(0.02, 0)) +
+      guides(fill = guide_legend(title = NULL)) +
+      ggtitle("Number of dependencies") +
+      theme_bw() +
+      theme(legend.position = "bottom")
   })
 
   output$package_versions_table <- renderTable({
-    selected_package_data() %>%
+    dat <- selected_package_data()
+    if (nrow(dat) == 0)
+      return()
+
+    dat %>%
       ungroup() %>%
       left_join(deps_summary, by = c("Package", "Version")) %>%
       mutate(date = as.character(date)) %>%
