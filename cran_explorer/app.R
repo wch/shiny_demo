@@ -18,7 +18,7 @@ date_min <- min(all_data$date)
 date_max <- max(all_data$date)
 
 
-# Get packages at a particular date
+# Get packages available on CRAN at a particular date
 packages_at_date <- function(target_date) {
   all_data %>%
     filter(date <= target_date) %>%
@@ -54,14 +54,43 @@ deps_summary <- all_deps %>%
 ui <- navbarPage(theme = shinytheme("paper"),
   "CRAN explorer",
   tabPanel("Timeline",
+    tags$head(tags$style(HTML("body { overflow-y: scroll; }"))),
     sliderInput("date", "Date",
       date_min, date_max, date_max,
       width = "100%"),
     plotOutput("cran_timeline", height = "160px"),
     checkboxInput("cran_timeline_log", "Log-10 scale", FALSE),
-    h3(
-      "Number of packages:",
-      textOutput("info_n_packages", inline = TRUE)
+    div(class = "row",
+      div(class = "col-md-3",
+        div(class = "panel panel-primary",
+          div(class = "panel-heading",
+            div(class = "panel-title", "Total packages")
+          ),
+          div(class = "panel-body",
+            h3(textOutput("info_n_packages"))
+          )
+        )
+      ),
+      div(class = "col-md-3",
+        div(class = "panel panel-primary",
+          div(class = "panel-heading",
+            div(class = "panel-title", "Packages released on this day")
+          ),
+          div(class = "panel-body",
+            h3(textOutput("info_n_packages_day"))
+          )
+        )
+      ),
+      div(class = "col-md-3",
+        div(class = "panel panel-primary",
+          div(class = "panel-heading",
+            div(class = "panel-title", "New packages on this day")
+          ),
+          div(class = "panel-body",
+            h3(textOutput("info_n_new_packages_day"))
+          )
+        )
+      )
     ),
     actionButton("refresh", "Refresh data")
   ),
@@ -96,11 +125,27 @@ server <- function(input, output) {
     all_at_date() %>% nrow()
   })
 
+  output$info_n_packages_day <- renderText({
+    all_data %>%
+      filter(date == input$date) %>%
+      nrow()
+  })
+
+  output$info_n_new_packages_day <- renderText({
+    all_data %>%
+      filter(date <= input$date) %>%
+      group_by(Package) %>%
+      filter(any(date == input$date)) %>%
+      summarise(total_releases = n()) %>%
+      filter(total_releases == 1) %>%
+      nrow()
+  })
+
+
   observeEvent(input$refresh, {
     download_crandb()
     crandb_file_to_df()
   })
-
 
   selected_package_data <- reactive({
     all_data %>% filter(Package == input$package)
@@ -160,7 +205,23 @@ server <- function(input, output) {
     y_lims <- c(-0.5*y_max, y_max)
     y_breaks <- pretty(c(0, y_max), n = 3)
 
-    ggplot(deps, aes(x = date)) +
+  # Create data set for step plot (we would use geom_step here, but it doesn't
+  # fill area under curve)
+  deps_step <- deps %>%
+    group_by(type) %>%
+    arrange(type, date)
+
+  deps_step <- bind_rows(
+      deps_step,
+      mutate(
+        deps_step,
+        date = date - 0.01,
+        n = lag(n, default = NA)
+      )
+    ) %>%
+    drop_na(n)
+
+    ggplot(deps_step, aes(x = date)) +
       geom_hline(yintercept = 0, size = 0.4) +
       geom_area(aes(y = n, fill = type), position = "stack", alpha = 0.4) +
       geom_line(aes(y = n, group = type), position = "stack", size = .2) +
