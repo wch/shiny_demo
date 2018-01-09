@@ -222,8 +222,8 @@ server <- function(input, output) {
     drop_na(n)
 
     ggplot(deps_step, aes(x = date)) +
-      geom_hline(yintercept = 0, size = 0.4) +
       geom_area(aes(y = n, fill = type), position = "stack", alpha = 0.4) +
+      geom_hline(yintercept = 0, size = 0.4) +
       geom_line(aes(y = n, group = type), position = "stack", size = .2) +
       geom_point(data = dat, y = 0, size = 1, color = "red") +
       geom_text_repel(data = dat, y = 0, angle = 90, color = "grey60",
