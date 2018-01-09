@@ -2,7 +2,6 @@ library(shiny)
 library(shinythemes)
 library(dplyr)
 library(tidyr)
-library(DT)
 library(purrr)
 library(ggplot2)
 library(ggrepel)
@@ -64,7 +63,6 @@ ui <- navbarPage(theme = shinytheme("paper"),
       "Number of packages:",
       textOutput("info_n_packages", inline = TRUE)
     ),
-    DT::dataTableOutput("table"),
     actionButton("refresh", "Refresh data")
   ),
   tabPanel("Package info",
@@ -92,12 +90,6 @@ server <- function(input, output) {
     par(mar = c(2,2,1.5,0))
     plot(count_by_date, n ~ date, type = "l")
     abline(v = input$date, col = "#ffcccc")
-  })
-
-  output$table <- renderDataTable({
-    all_at_date() %>%
-      mutate(Date = as.character(date)) %>%
-      select(Package, Version, Date)
   })
 
   output$info_n_packages <- renderText({
