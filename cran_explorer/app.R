@@ -67,6 +67,7 @@ info_panel <- function(title = "", content, class = "default") {
 
 ui <- navbarPage(theme = shinytheme("paper"),
   "CRAN explorer",
+  id = "tabs",
   tabPanel("Timeline",
     tags$head(tags$style(HTML("body { overflow-y: scroll; }"))),
     sliderInput("date", "Date",
