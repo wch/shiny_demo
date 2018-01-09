@@ -6,7 +6,7 @@ library(purrr)
 library(ggplot2)
 library(ggrepel)
 
-source("../utils.R")
+source("utils.R")
 
 all_data <- readRDS("packages.rds")
 all_data <- all_data %>%
