@@ -49,6 +49,20 @@ deps_summary <- all_deps %>%
   replace_na(list(Depends = 0L, Imports = 0L, Suggests = 0L))
 
 
+info_panel <- function(title = "", content, class = "default") {
+  panel_class <- if (!is.null(class)) paste0("panel-", class)
+
+  div(class = "col-sm-3",
+    div(class = paste("panel", panel_class),
+      div(class = "panel-heading",
+        div(class = "panel-title", title)
+      ),
+      div(class = "panel-body",
+        content
+      )
+    )
+  )
+}
 
 
 ui <- navbarPage(theme = shinytheme("paper"),
@@ -61,35 +75,22 @@ ui <- navbarPage(theme = shinytheme("paper"),
     plotOutput("cran_timeline", height = "160px"),
     checkboxInput("cran_timeline_log", "Log-10 scale", FALSE),
     div(class = "row",
-      div(class = "col-md-3",
-        div(class = "panel panel-primary",
-          div(class = "panel-heading",
-            div(class = "panel-title", "Total packages")
-          ),
-          div(class = "panel-body",
-            h3(textOutput("info_n_packages"))
-          )
-        )
+      info_panel(
+        "On this day",
+        h3(textOutput("info_date")),
+        class = "primary"
       ),
-      div(class = "col-md-3",
-        div(class = "panel panel-primary",
-          div(class = "panel-heading",
-            div(class = "panel-title", "Packages released on this day")
-          ),
-          div(class = "panel-body",
-            h3(textOutput("info_n_packages_day"))
-          )
-        )
+      info_panel(
+        "Packages on CRAN",
+        h3(textOutput("info_n_packages"))
       ),
-      div(class = "col-md-3",
-        div(class = "panel panel-primary",
-          div(class = "panel-heading",
-            div(class = "panel-title", "New packages on this day")
-          ),
-          div(class = "panel-body",
-            h3(textOutput("info_n_new_packages_day"))
-          )
-        )
+      info_panel(
+        "Packages released",
+        h3(textOutput("info_n_packages_day"))
+      ),
+      info_panel(
+        "New packages",
+        h3(textOutput("info_n_new_packages_day"))
       )
     ),
     actionButton("refresh", "Refresh data")
@@ -119,6 +120,10 @@ server <- function(input, output) {
     par(mar = c(2,2,1.5,0))
     plot(count_by_date, n ~ date, type = "l")
     abline(v = input$date, col = "#ffcccc")
+  })
+
+  output$info_date <- renderText({
+    format(input$date, "%Y/%m/%d")
   })
 
   output$info_n_packages <- renderText({
