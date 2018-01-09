@@ -13,41 +13,21 @@ all_data <- readRDS("packages.rds")
 all_data <- all_data %>%
   # This package has a way earlier date than all others
   filter(Package != "hpower") %>%
-  # These will always be "Package" and the same as `Author` -- removing them leaves us with a neat 16 rows
-  select(-Type, -`Authors@R`) %>%
-  select(
-    Package, Title, Version, URL,
-    Description, Maintainer, Author, Collate,
-    License, NeedsCompilation, BugReports, Repository,
-    MD5sum, Packaged, `Date/Publication`, date
-  ) %>%
-  group_by(Package) %>%
   arrange(desc(date))
-
-all_deps <- readRDS("deps.rds")
 
 date_min <- min(all_data$date)
 date_max <- max(all_data$date)
 
 
-deps_summary <- all_deps %>%
-  group_by(Package, Version, type) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  spread(type, n) %>%
-  replace_na(list(Depends = 0L, Imports = 0L, Suggests = 0L))
-
-
+# Get packages at a particular date
 packages_at_date <- function(target_date) {
   all_data %>%
     filter(date <= target_date) %>%
+    group_by(Package) %>%
     slice(1)
 }
 
-# Compute by using cumsum
-# Talk about precompute for hours
-# Fairly expensive operation - takes ~7s for n=20
-compute_count_by_date <- function(n = 4) {
+compute_count_by_date <- function(n = 25) {
   dates <- seq(date_min, date_max, length.out = n)
   counts <- vapply(dates,
     function(date) packages_at_date(date) %>% nrow(),
@@ -57,6 +37,18 @@ compute_count_by_date <- function(n = 4) {
   data.frame(date = dates, n = counts)
 }
 count_by_date <- compute_count_by_date()
+
+
+# Dependencies data
+all_deps <- readRDS("deps.rds")
+
+deps_summary <- all_deps %>%
+  group_by(Package, Version, type) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  spread(type, n) %>%
+  replace_na(list(Depends = 0L, Imports = 0L, Suggests = 0L))
+
 
 
 
@@ -128,6 +120,9 @@ server <- function(input, output) {
   })
 
   output$package_info <- renderUI({
+    if (is.null(input$package_version) || input$package_version == "")
+      return()
+
     dat <- selected_package_data() %>% filter(Version == input$package_version)
     if (nrow(dat) != 1)
       return()
@@ -140,8 +135,10 @@ server <- function(input, output) {
       p(tags$b("Description: "), dat$Description),
       p(tags$b("Maintainer: "), dat$Maintainer),
       p(tags$b("License: "), dat$License),
-      p(tags$b("Bug Reports: "), a(href = dat$BugReports, dat$BugReports, target = "_blank")),
-      p(tags$b("URL: "), a(href = dat$URL, dat$URL, target = "_blank")),
+      if (!is.na(dat$BugReports))
+        p(tags$b("Bug Reports: "), a(href = dat$BugReports, dat$BugReports, target = "_blank")),
+      if (!is.na(dat$URL))
+        p(tags$b("URL: "), a(href = dat$URL, dat$URL, target = "_blank")),
       p(tags$b("Date: "), dat$date),
       p(tags$b("Depends: "),
         filter(deps, type == "Depends") %>% pull(name) %>% paste(collapse = ", ")),
@@ -183,7 +180,7 @@ server <- function(input, output) {
       scale_y_continuous(name = NULL, limits = y_lims, breaks = y_breaks, expand = c(0.05, 0)) +
       scale_x_date(name = NULL, date_minor_breaks = "1 month", expand = c(0.02, 0)) +
       guides(fill = guide_legend(title = NULL)) +
-      ggtitle("Number of dependencies") +
+      ggtitle("Releases and dependencies over time") +
       theme_bw() +
       theme(legend.position = "bottom")
   })
