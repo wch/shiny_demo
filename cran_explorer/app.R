@@ -8,11 +8,20 @@ library(ggplot2)
 library(ggrepel)
 
 source("../utils.R")
+source("../pkg_info.R")
 
 all_data <- readRDS("packages.rds")
 all_data <- all_data %>%
   # This package has a way earlier date than all others
   filter(Package != "hpower") %>%
+  # These will always be "Package" and the same as `Author` -- removing them leaves us with a neat 16 rows
+  select(-Type, -`Authors@R`) %>%
+  select(
+    Package, Title, Version, URL,
+    Description, Maintainer, Author, Collate,
+    License, NeedsCompilation, BugReports, Repository,
+    MD5sum, Packaged, `Date/Publication`, date
+  ) %>%
   group_by(Package) %>%
   arrange(desc(date))
 
@@ -55,6 +64,7 @@ count_by_date <- compute_count_by_date()
 ui <- navbarPage(theme = shinytheme("paper"),
   "Packages on CRAN",
   tabPanel("Timeline",
+    includeCSS("../pkg_info.css"),
     sliderInput("date", "Date",
       date_min, date_max, date_max,
       width = "100%"),
@@ -73,7 +83,7 @@ ui <- navbarPage(theme = shinytheme("paper"),
       style="display:inline-block"
     ),
     uiOutput("package_version_selector", style = "display:inline-block"),
-    verbatimTextOutput("package_info"),
+    uiOutput("package_info"),
     plotOutput("package_timeline", height = "120px"),
     plotOutput("package_deps_timeline", height = "120px"),
     tableOutput("package_versions_table")
@@ -120,11 +130,12 @@ server <- function(input, output) {
     selectInput("package_version", "Version", versions, selectize = FALSE, width = "150px")
   })
 
-  output$package_info <- renderPrint({
+  output$package_info <- renderUI({
     dat <- selected_package_data() %>% filter(Version == input$package_version)
     if (nrow(dat) != 1)
       return(invisible())
-    str(transpose(dat)[[1]])
+    # str(transpose(dat)[[1]])
+    pkg_info_table(dat)
   })
 
   output$package_timeline <- renderPlot({
