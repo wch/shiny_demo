@@ -186,14 +186,31 @@ server <- function(input, output) {
   })
 
   observeEvent(input$refresh, {
-    # Update the data. Note that this does not save over the existing .rds
-    # files, so the update will not persist across runs of the app.
-    json <- download_crandb()
-    crandb_data <- process_crandb_json(json)
+    old_all_data  <- all_data
+    old_deps_data <- deps_data
 
-    # Writing to these reactive bindings will trigger invalidations.
-    all_data  <<- crandb_data$packages
-    deps_data <<- crandb_data$deps
+    # Set these to NULL immediately to invalidate downstream reactives and have
+    # corresponding UI elements gray out.
+    all_data <<- NULL
+    deps_data <<- NULL
+
+    tryCatch(
+      {
+        # Update the data. Note that this does not save over the existing .rds
+        # files, so the update will not persist across runs of the app.
+        json <- download_crandb()
+        crandb_data <- process_crandb_json(json)
+
+        # Writing to these reactive bindings will trigger invalidations.
+        all_data  <<- crandb_data$packages
+        deps_data <<- crandb_data$deps
+      },
+      error = function(e) {
+        # If error occurs, just restore the original data.
+        all_data  <<- old_all_data
+        deps_data <<- old_deps_data
+      }
+    )
   })
 
 
