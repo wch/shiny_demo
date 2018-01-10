@@ -9,14 +9,14 @@ runApp("cran_explorer")
 ```
 
 
-The data is stored in the cran_explorer/ directory in two files: packages.rds and deps.rds. To update these files, run this from the top-level directory:
+The data is stored in the cran_explorer/ directory in two files: packages.csv and deps.csv. To update these files, run this from the top-level directory:
 
 ```R
 source("cran_explorer/utils.R")
 json <- download_crandb()
 crandb_data <- process_crandb_json(json)
-saveRDS(crandb_data$packages, "cran_explorer/packages.rds")
-saveRDS(crandb_data$deps, "cran_explorer/deps.rds")
+write_csv(crandb_data$packages, "cran_explorer/packages.csv")
+write_csv(crandb_data$deps, "cran_explorer/deps.csv")
 ```
 
 In the application, there is a "Refresh Data" button. It will download new data, but it will *not* save it over the .rds files. This is to make it easier to demonstrate that the update really occurs -- the saved .rds files should be from an earlier day than the demonstration. (In the future, it might be useful to make it possible to save to disk.)
