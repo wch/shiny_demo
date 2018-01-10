@@ -16,7 +16,7 @@ date_max <- reactive( max(all_data$date) )
 
 
 # Get packages available on CRAN at a particular date
-packages_at_date <- function(target_date) {
+packages_available_at_date <- function(target_date) {
   all_data %>%
     filter(date <= target_date) %>%
     group_by(Package) %>%
@@ -26,7 +26,7 @@ packages_at_date <- function(target_date) {
 compute_count_by_date <- function(n = 25) {
   dates <- seq(date_min(), date_max(), length.out = n)
   counts <- vapply(dates,
-    function(date) packages_at_date(date) %>% nrow(),
+    function(date) packages_available_at_date(date) %>% nrow(),
     0L
   )
 
@@ -55,7 +55,7 @@ deps_summary <- reactive({
 info_panel <- function(title = "", content, class = "default") {
   panel_class <- if (!is.null(class)) paste0("panel-", class)
 
-  div(class = "col-sm-3",
+  div(class = "col-sm-4",
     div(class = paste("panel", panel_class),
       div(class = "panel-heading",
         div(class = "panel-title", title)
@@ -75,27 +75,39 @@ ui <- navbarPage(theme = shinytheme("paper"),
     tags$head(tags$style(HTML("body { overflow-y: scroll; }"))),
     uiOutput("date_slider_ui"),
     plotOutput("cran_timeline", height = "160px"),
-    checkboxInput("cran_timeline_log", "Log-10 scale", FALSE),
-    div(class = "row",
-      info_panel(
-        "On this day",
-        h3(textOutput("info_date")),
-        class = "primary"
-      ),
-      info_panel(
-        "Packages on CRAN",
-        h3(textOutput("info_n_packages"))
-      ),
-      info_panel(
-        "Packages released",
-        h3(textOutput("info_n_packages_day"))
-      ),
-      info_panel(
-        "New packages",
-        h3(textOutput("info_n_new_packages_day"))
-      )
+    div(
+      checkboxInput("cran_timeline_log", "Log-10 scale", FALSE),
+      style = "display:inline-block"
     ),
-    actionButton("refresh", "Refresh data")
+    actionButton("refresh", "Refresh data",
+      style = "display:inline-block; float:right;"
+    ),
+    div(class = "panel",
+      div(class = "panel-heading",
+        style = "font-weight: bold; font-size: xx-large;",
+        textOutput("info_date")
+      ),
+      div(class = "panel-body",
+        div(class = "row",
+          info_panel(
+            "Available packages",
+            h3(textOutput("info_n_packages"))
+          ),
+          info_panel(
+            "Packages released",
+            h3(textOutput("info_n_packages_day"))
+          ),
+          info_panel(
+            "New packages",
+            h3(textOutput("info_n_new_packages_day"))
+          ),
+          div(class = "col-sm-12",
+            h4("Packages released on this day"),
+            tableOutput("info_released_packages_table")
+          )
+        )
+      )
+    )
   ),
   tabPanel("Package info",
     div(
@@ -117,13 +129,21 @@ server <- function(input, output) {
 
   # Overview tab ==============================================================
 
-  output$date_slider_ui <- renderUI({
-    sliderInput("date", "Date", date_min(), date_max(), date_max(), width = "100%")
+  packages_released_on_date <- reactive({
+    req(input$date)
+    all_data %>%
+      filter(date <= input$date) %>%
+      group_by(Package) %>%
+      filter(any(date == input$date)) %>%
+      summarise(
+        Version = first(Version),
+        total_releases = n()
+      ) %>%
+      ungroup()
   })
 
-  all_at_date <- reactive({
-    req(input$date)
-    packages_at_date(input$date)
+  output$date_slider_ui <- renderUI({
+    sliderInput("date", "Date", date_min(), date_max(), date_max(), width = "100%")
   })
 
   output$cran_timeline <- renderPlot({
@@ -144,27 +164,26 @@ server <- function(input, output) {
   })
 
   output$info_n_packages <- renderText({
-    all_at_date() %>% nrow()
+    req(input$date)
+    packages_available_at_date(input$date) %>% nrow()
   })
 
   output$info_n_packages_day <- renderText({
-    req(input$date)
-    all_data %>%
-      filter(date == input$date) %>%
+    packages_released_on_date() %>%
       nrow()
   })
 
   output$info_n_new_packages_day <- renderText({
-    req(input$date)
-    all_data %>%
-      filter(date <= input$date) %>%
-      group_by(Package) %>%
-      filter(any(date == input$date)) %>%
-      summarise(total_releases = n()) %>%
+    packages_released_on_date() %>%
       filter(total_releases == 1) %>%
       nrow()
   })
 
+  output$info_released_packages_table <- renderTable({
+    packages_released_on_date() %>%
+      mutate(" " = ifelse(total_releases == 1, "New", "")) %>%
+      rename(`Total Releases` = total_releases)
+  })
 
   observeEvent(input$refresh, {
     # Update the data. Note that this does not save over the existing .rds
