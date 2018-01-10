@@ -2,41 +2,62 @@ library(shiny)
 library(shinythemes)
 library(dplyr)
 library(tidyr)
+library(readr)
 library(purrr)
 library(ggplot2)
 library(ggrepel)
 
 source("utils.R")
 
-all_data <- readRDS("packages.rds")
+all_data <- read_csv("packages.csv")
 makeReactiveBinding("all_data")
 
 date_min <- reactive( min(all_data$date) )
 date_max <- reactive( max(all_data$date) )
 
+packages_summary_by_date <- reactive({
+  # Creates a tibble with columns:
+  # * date - ascending dates from date_min() to date_max()
+  # * n - total number of packages available as of that date
+  # * new - number of packages that were published for the first time
+
+  df <- all_data %>%
+    group_by(Package) %>%
+    summarise(date = min(date)) %>%
+    group_by(date) %>%
+    tally() %>%
+    arrange(date)
+
+  all_dates <- data.frame(
+    date = seq(date_min(), date_max(), 1)
+  )
+
+  df %>%
+    right_join(all_dates, "date") %>%
+    mutate(n = ifelse(!is.na(n), n, 0)) %>%
+    rename(new = n) %>%
+    mutate(n = cumsum(new)) %>%
+    arrange(date) %>%
+    select(date, n, new)
+})
 
 # Get packages available on CRAN at a particular date
 packages_available_at_date <- function(target_date) {
-  all_data %>%
-    filter(date <= target_date) %>%
-    group_by(Package) %>%
-    slice(1)
+  packages_summary_by_date() %>%
+    filter(date == target_date) %>%
+    `[[`("n")
 }
 
 compute_count_by_date <- function(n = 25) {
-  dates <- seq(date_min(), date_max(), length.out = n)
-  counts <- vapply(dates,
-    function(date) packages_available_at_date(date) %>% nrow(),
-    0L
-  )
-
-  data.frame(date = dates, n = counts)
+  df <- packages_summary_by_date()
+  indices <- seq(1, nrow(df), length.out = n)
+  df[indices,]
 }
 count_by_date <- reactive( compute_count_by_date() )
 
 
 # Dependencies data
-all_deps <- readRDS("deps.rds")
+all_deps <- read_csv("deps.csv")
 makeReactiveBinding("all_deps")
 
 deps_summary <- reactive({
@@ -131,10 +152,13 @@ server <- function(input, output) {
 
   packages_released_on_date <- reactive({
     req(input$date)
+
+    released_packages <- all_data %>% filter(date == input$date) %>% `[[`("Package")
+
     all_data %>%
       filter(date <= input$date) %>%
+      filter(Package %in% released_packages) %>%
       group_by(Package) %>%
-      filter(any(date == input$date)) %>%
       summarise(
         Version = first(Version),
         total_releases = n()
@@ -148,7 +172,7 @@ server <- function(input, output) {
 
   output$cran_timeline <- renderPlot({
     req(input$date)
-    counts <- count_by_date()
+    counts <- count_by_date() %>% select(date, n)
 
     if (input$cran_timeline_log) {
       counts$n <- log10(counts$n)
@@ -165,7 +189,7 @@ server <- function(input, output) {
 
   output$info_n_packages <- renderText({
     req(input$date)
-    packages_available_at_date(input$date) %>% nrow()
+    packages_available_at_date(input$date)
   })
 
   output$info_n_packages_day <- renderText({
