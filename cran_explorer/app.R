@@ -45,7 +45,7 @@ packages_summary_by_date <- reactive({
 packages_available_at_date <- function(target_date) {
   packages_summary_by_date() %>%
     filter(date == target_date) %>%
-    `[[`("n")
+    pull(n)
 }
 
 compute_count_by_date <- function(n = 25) {
@@ -153,7 +153,7 @@ server <- function(input, output) {
   packages_released_on_date <- reactive({
     req(input$date)
 
-    released_packages <- all_data %>% filter(date == input$date) %>% `[[`("Package")
+    released_packages <- all_data %>% filter(date == input$date) %>% pull(Package)
 
     all_data %>%
       filter(date <= input$date) %>%
