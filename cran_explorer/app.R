@@ -10,11 +10,10 @@ library(ggrepel)
 source("utils.R")
 source("plot_cache.R")
 
-all_data <- read_csv("packages.csv")
-makeReactiveBinding("all_data")
+all_data <- reactiveVal(read_csv("packages.csv"))
 
-date_min <- reactive( min(all_data$date) )
-date_max <- reactive( max(all_data$date) )
+date_min <- reactive( min(all_data()$date) )
+date_max <- reactive( max(all_data()$date) )
 
 packages_summary_by_date <- reactive({
   # Creates a tibble with columns:
@@ -22,7 +21,7 @@ packages_summary_by_date <- reactive({
   # * n - total number of packages available as of that date
   # * new - number of packages that were published for the first time
 
-  df <- all_data %>%
+  df <- all_data() %>%
     group_by(Package) %>%
     summarise(date = min(date)) %>%
     group_by(date) %>%
@@ -58,11 +57,10 @@ count_by_date <- reactive( compute_count_by_date() )
 
 
 # Dependencies data
-all_deps <- read_csv("deps.csv")
-makeReactiveBinding("all_deps")
+all_deps <- reactiveVal(read_csv("deps.csv"))
 
 deps_summary <- reactive({
-  all_deps %>%
+  all_deps() %>%
     group_by(Package, Version, type) %>%
     summarise(n = n()) %>%
     ungroup() %>%
@@ -75,7 +73,7 @@ plot_width <- 800
 plot_height <- 240
 plot_retina <- 2
 
-plot_cache <- plotCache("package_timeline", all_deps,
+plot_cache <- plotCache("package_timeline", all_deps(),
   width = plot_width * plot_retina, height = plot_height * plot_retina,
   res = 72 * plot_retina,
   function(package, dat) {
@@ -84,7 +82,7 @@ plot_cache <- plotCache("package_timeline", all_deps,
 
     deps <- gather(deps_summary(), type, n, Depends:Suggests) %>%
       filter(Package == package) %>%
-      left_join(all_data, by = c("Package", "Version")) %>%
+      left_join(all_data(), by = c("Package", "Version")) %>%
       mutate(type = factor(type, levels = c("Suggests", "Imports", "Depends")))
 
     y_max <- deps %>%
@@ -214,9 +212,9 @@ server <- function(input, output) {
   packages_released_on_date <- reactive({
     req(input$date)
 
-    released_packages <- all_data %>% filter(date == input$date) %>% pull(Package)
+    released_packages <- all_data() %>% filter(date == input$date) %>% pull(Package)
 
-    all_data %>%
+    all_data() %>%
       filter(date <= input$date) %>%
       filter(Package %in% released_packages) %>%
       group_by(Package) %>%
@@ -271,13 +269,13 @@ server <- function(input, output) {
   })
 
   observeEvent(input$refresh, {
-    old_all_data  <- all_data
-    old_deps_data <- deps_data
+    old_all_data  <- all_data()
+    old_all_deps <- all_deps()
 
     # Set these to NULL immediately to invalidate downstream reactives and have
     # corresponding UI elements gray out.
-    all_data <<- NULL
-    deps_data <<- NULL
+    all_data(NULL)
+    all_deps(NULL)
 
     tryCatch(
       {
@@ -286,14 +284,14 @@ server <- function(input, output) {
         json <- download_crandb()
         crandb_data <- process_crandb_json(json)
 
-        # Writing to these reactive bindings will trigger invalidations.
-        all_data  <<- crandb_data$packages
-        deps_data <<- crandb_data$deps
+        # Writing to these reactive vals will trigger invalidations.
+        all_data(crandb_data$packages)
+        all_deps(crandb_data$deps)
       },
       error = function(e) {
         # If error occurs, just restore the original data.
-        all_data  <<- old_all_data
-        deps_data <<- old_deps_data
+        all_data(old_all_data)
+        all_deps(old_deps_data)
       }
     )
   })
@@ -302,7 +300,7 @@ server <- function(input, output) {
   # Selected package tab ======================================================
 
   selected_package_data <- reactive({
-    all_data %>% filter(Package == input$package)
+    all_data() %>% filter(Package == input$package)
   })
 
   output$package_version_selector <- renderUI({
@@ -318,7 +316,7 @@ server <- function(input, output) {
     if (nrow(dat) != 1)
       return()
 
-    deps <- dat %>% left_join(all_deps, by = c("Package", "Version"))
+    deps <- dat %>% left_join(all_deps(), by = c("Package", "Version"))
 
     wellPanel(
       p(tags$b("Title: "), dat$Title),
