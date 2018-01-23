@@ -46,18 +46,18 @@ packages_summary_by_date <- reactive({
   # * n - total number of packages available as of that date
   # * new - number of packages that were published for the first time
 
-  df <- all_data() %...>%
-    group_by(Package) %...>%
-    summarise(date = min(date)) %...>%
-    group_by(date) %...>%
-    tally() %...>%
-    arrange(date)
+  promise_all(all_data = all_data(), date_min = date_min(), date_max = date_max()) %...>%
+    with({
+      df <- all_data %>%
+        group_by(Package) %>%
+        summarise(date = min(date)) %>%
+        group_by(date) %>%
+        tally() %>%
+        arrange(date)
 
-  promise_all(df = df, date_min = date_min(), date_max = date_max()) %...>%
-    (function(result) {
-      all_dates <- data.frame(date = seq(result$date_min, result$date_max, 1))
+      all_dates <- data.frame(date = seq(date_min, date_max, 1))
 
-      result$df %>%
+      df %>%
         right_join(all_dates, "date") %>%
         mutate(n = ifelse(!is.na(n), n, 0)) %>%
         rename(new = n) %>%
@@ -108,11 +108,11 @@ plot_cache <- plotCache("package_timeline", all_deps(),
       return()
 
     promise_all(deps_summary = deps_summary(), all_data = all_data()) %...>%
-      (function(result) {
-        deps <- result$deps_summary %>%
+      with({
+        deps <- deps_summary %>%
           gather(type, n, Depends:Suggests) %>%
           filter(Package == package) %>%
-          left_join(result$all_data, by = c("Package", "Version")) %>%
+          left_join(all_data, by = c("Package", "Version")) %>%
           mutate(type = factor(type, levels = c("Suggests", "Imports", "Depends")))
 
         y_max <- deps %>%
@@ -326,34 +326,32 @@ server <- function(input, output) {
     if (is.null(input$package_version) || input$package_version == "")
       return()
 
-    selected_package_data() %...>% filter(Version == input$package_version) %...>%
-      (function(dat) {
+    promise_all(dat = selected_package_data() %...>% filter(Version == input$package_version),
+      all_deps = all_deps()) %...>%
+      with({
         if (nrow(dat) != 1)
           return()
 
-        all_deps() %...>% {
-          all_deps <- .
-          deps <- dat %>% left_join(all_deps, by = c("Package", "Version"))
+        deps <- dat %>% left_join(all_deps, by = c("Package", "Version"))
 
-          wellPanel(
-            p(tags$b("Title: "), dat$Title),
-            p(tags$b("Description: "), dat$Description),
-            p(tags$b("Maintainer: "), dat$Maintainer),
-            p(tags$b("License: "), dat$License),
-            if (!is.na(dat$BugReports))
-              p(tags$b("Bug Reports: "), a(href = dat$BugReports, dat$BugReports, target = "_blank")),
-            if (!is.na(dat$URL))
-              p(tags$b("URL: "), a(href = dat$URL, dat$URL, target = "_blank")),
-            p(tags$b("Date: "), dat$date),
-            p(tags$b("Depends: "),
-              filter(deps, type == "Depends") %>% pull(name) %>% paste(collapse = ", ")),
-            p(tags$b("Imports: "),
-              filter(deps, type == "Imports") %>% pull(name) %>% paste(collapse = ", ")),
-            p(tags$b("Suggests: "),
-              filter(deps, type == "Suggests") %>% pull(name) %>% paste(collapse = ", ")),
-            p(tags$b("MD5sum: "), dat$MD5sum)
-          )
-        }
+        wellPanel(
+          p(tags$b("Title: "), dat$Title),
+          p(tags$b("Description: "), dat$Description),
+          p(tags$b("Maintainer: "), dat$Maintainer),
+          p(tags$b("License: "), dat$License),
+          if (!is.na(dat$BugReports))
+            p(tags$b("Bug Reports: "), a(href = dat$BugReports, dat$BugReports, target = "_blank")),
+          if (!is.na(dat$URL))
+            p(tags$b("URL: "), a(href = dat$URL, dat$URL, target = "_blank")),
+          p(tags$b("Date: "), dat$date),
+          p(tags$b("Depends: "),
+            filter(deps, type == "Depends") %>% pull(name) %>% paste(collapse = ", ")),
+          p(tags$b("Imports: "),
+            filter(deps, type == "Imports") %>% pull(name) %>% paste(collapse = ", ")),
+          p(tags$b("Suggests: "),
+            filter(deps, type == "Suggests") %>% pull(name) %>% paste(collapse = ", ")),
+          p(tags$b("MD5sum: "), dat$MD5sum)
+        )
       })
   })
 
@@ -365,13 +363,13 @@ server <- function(input, output) {
 
   output$package_versions_table <- renderTable({
     promise_all(dat = selected_package_data(), deps_summary = deps_summary()) %...>%
-      (function (result) {
-        if (nrow(result$dat) == 0)
+      with({
+        if (nrow(dat) == 0)
           return()
 
-        result$dat %>%
+        dat %>%
           ungroup() %>%
-          left_join(result$deps_summary, by = c("Package", "Version")) %>%
+          left_join(deps_summary, by = c("Package", "Version")) %>%
           mutate(date = as.character(date)) %>%
           select(Version, Maintainer, License, date, Depends, Imports, Suggests) %>%
           arrange(desc(date))
