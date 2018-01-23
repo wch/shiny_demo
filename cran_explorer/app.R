@@ -10,7 +10,22 @@ library(ggrepel)
 source("utils.R")
 source("plot_cache.R")
 
-all_data <- reactiveVal(read_csv("packages.csv"))
+update_trigger <- reactiveVal(0)
+download_data <- eventReactive(update_trigger(), {
+  if (update_trigger() == 0) {
+    list(
+      packages = read_csv("packages.csv"),
+      deps = read_csv("deps.csv")
+    )
+  } else {
+    # Update the data. Note that this does not save over the existing .rds
+    # files, so the update will not persist across runs of the app.
+    json <- download_crandb()
+    process_crandb_json(json)
+  }
+})
+
+all_data <- reactive({ download_data()$packages })
 
 date_min <- reactive( min(all_data()$date) )
 date_max <- reactive( max(all_data()$date) )
@@ -57,7 +72,7 @@ count_by_date <- reactive( compute_count_by_date() )
 
 
 # Dependencies data
-all_deps <- reactiveVal(read_csv("deps.csv"))
+all_deps <- reactive({ download_data()$deps })
 
 deps_summary <- reactive({
   all_deps() %>%
@@ -269,31 +284,7 @@ server <- function(input, output) {
   })
 
   observeEvent(input$refresh, {
-    old_all_data  <- all_data()
-    old_all_deps <- all_deps()
-
-    # Set these to NULL immediately to invalidate downstream reactives and have
-    # corresponding UI elements gray out.
-    all_data(NULL)
-    all_deps(NULL)
-
-    tryCatch(
-      {
-        # Update the data. Note that this does not save over the existing .rds
-        # files, so the update will not persist across runs of the app.
-        json <- download_crandb()
-        crandb_data <- process_crandb_json(json)
-
-        # Writing to these reactive vals will trigger invalidations.
-        all_data(crandb_data$packages)
-        all_deps(crandb_data$deps)
-      },
-      error = function(e) {
-        # If error occurs, just restore the original data.
-        all_data(old_all_data)
-        all_deps(old_deps_data)
-      }
-    )
+    update_trigger(update_trigger() - 1)
   })
 
 
