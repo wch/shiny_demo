@@ -53,12 +53,22 @@ plotCache <- function(cacheId, invalidationExpr, width, height, res = 72,
     filePath <- file.path(cachePath, key)
     if (!file.exists(filePath)) {
       message("Cache miss")
-      shiny::plotPNG(function() {
-        do.call("plotFunc", args)
-      }, filename = filePath, width = width, height = height, res = res)
+      shiny:::startPNG(filePath, width = width, height = height, res = res)
+      shiny:::hybrid_chain(do.call("plotFunc", args),
+        function(result, .visible) {
+          if (.visible) {
+            capture.output(print(result))
+          }
+          filePath
+        },
+        finally = function() {
+          grDevices::dev.off()
+        },
+        domain = shiny:::createGraphicsDevicePromiseDomain()
+      )
     } else {
       message("Cache hit")
+      promises::promise_resolve(filePath)
     }
-    filePath
   }
 }
