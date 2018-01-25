@@ -44,7 +44,7 @@ plotCache <- function(cacheId, invalidationExpr, width, height, res = 72,
       file.rename(cachePath, paste0(cachePath, ".gone"))
     }
     dir.create(cachePath, recursive = TRUE, mode = "0700")
-    unlink(paste0(cachePath, ".gone"))
+    unlink(paste0(cachePath, ".gone"), recursive = TRUE)
   })
 
   function(...) {
