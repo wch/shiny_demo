@@ -26,8 +26,8 @@ download_data <- eventReactive(update_trigger(), {
     # Update the data. Note that this does not save over the existing .rds
     # files, so the update will not persist across runs of the app.
     future({
-      json <- download_crandb()
-      process_crandb_json(json)
+      download_crandb() %>%
+        process_crandb_json()
     })
   }
 })
