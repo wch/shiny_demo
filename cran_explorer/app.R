@@ -291,7 +291,7 @@ server <- function(input, output) {
       error = function(e) {
         # If error occurs, just restore the original data.
         all_data(old_all_data)
-        all_deps(old_deps_data)
+        all_deps(old_all_deps)
       }
     )
   })
