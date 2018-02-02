@@ -6,6 +6,9 @@ library(readr)
 library(purrr)
 library(ggplot2)
 library(ggrepel)
+library(promises)
+library(future)
+plan(multiprocess)
 
 source("utils.R")
 source("plot_cache.R")
@@ -205,7 +208,7 @@ ui <- navbarPage(theme = shinytheme("paper"),
 # =============================================================================
 # Server
 # =============================================================================
-server <- function(input, output) {
+server <- function(input, output, session) {
 
   # Overview tab ==============================================================
 
@@ -269,31 +272,17 @@ server <- function(input, output) {
   })
 
   observeEvent(input$refresh, {
-    old_all_data  <- all_data()
-    old_all_deps <- all_deps()
-
-    # Set these to NULL immediately to invalidate downstream reactives and have
-    # corresponding UI elements gray out.
-    all_data(NULL)
-    all_deps(NULL)
-
-    tryCatch(
-      {
-        # Update the data. Note that this does not save over the existing .rds
-        # files, so the update will not persist across runs of the app.
-        json <- download_crandb()
-        crandb_data <- process_crandb_json(json)
-
+    p <- Progress$new(session)
+    p$set(message = "Downloading data...")
+    # Update the data. Note that this does not save over the existing .rds
+    # files, so the update will not persist across runs of the app.
+    future({ download_crandb() %>% process_crandb_json() }) %...>%
+      with({
         # Writing to these reactive vals will trigger invalidations.
-        all_data(crandb_data$packages)
-        all_deps(crandb_data$deps)
-      },
-      error = function(e) {
-        # If error occurs, just restore the original data.
-        all_data(old_all_data)
-        all_deps(old_deps_data)
-      }
-    )
+        all_data(packages)
+        all_deps(deps)
+      }) %>%
+      finally(~p$close())
   })
 
 
