@@ -281,7 +281,12 @@ server <- function(input, output, session) {
         # Writing to these reactive vals will trigger invalidations.
         all_data(packages)
         all_deps(deps)
-      }) %>%
+      }) %...!% {
+        modal <- modalDialog(title = "Unable to download data",
+          "Sorry, an error has occurred.",
+          easyClose = TRUE)
+        showModal(modal)
+      } %>%
       finally(~p$close())
   })
 
