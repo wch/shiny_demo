@@ -10,7 +10,7 @@ library(ggrepel)
 source("utils.R")
 source("plot_cache.R")
 
-all_data <- reactiveVal(read_csv("packages.csv"))
+all_data <- reactiveVal(read_rds("packages.rds"))
 
 date_min <- reactive( min(all_data()$date) )
 date_max <- reactive( max(all_data()$date) )
@@ -57,7 +57,7 @@ count_by_date <- reactive( compute_count_by_date() )
 
 
 # Dependencies data
-all_deps <- reactiveVal(read_csv("deps.csv"))
+all_deps <- reactiveVal(read_rds("deps.rds"))
 
 deps_summary <- reactive({
   all_deps() %>%
